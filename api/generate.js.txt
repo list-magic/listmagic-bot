@@ -52,3 +52,74 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server Connection Error' });
   }
 }
+export default async function handler(req, res) {
+  // CRITICAL: Fully allow all cross-origin requests from Systeme.io
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
+
+  // Handle browser OPTIONS preflight request immediately
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  try {
+    const { prompt } = req.body || {};
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Please enter keywords first.' });
+    }
+
+    // Verify key exists
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OPENAI_API_KEY missing in Vercel settings.' });
+    }
+
+    const systemInstructions = `
+      You are the "ListMagic Etsy Ranker", an elite Etsy SEO and Listing Expert.
+      Take the user's product input, niche, and focus keywords, then generate a complete, high-converting Etsy listing optimization.
+
+      OUTPUT FORMAT:
+      📌 TITLE (Under 140 Chars):
+      [Primary Keyword First | Secondary Keywords]
+
+      🏷️ 13 ALGORITHM TAGS (Under 20 Chars Each):
+      [13 comma-separated long-tail tags]
+
+      📝 HIGH-CONVERTING DESCRIPTION:
+      [Hook, Bulleted Features, Call to Action]
+    `;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY.trim()}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemInstructions },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(500).json({ error: `OpenAI Error: ${data.error?.message || 'Invalid API Key or Quota Limit'}` });
+    }
+
+    const resultText = data.choices?.[0]?.message?.content;
+    return res.status(200).json({ result: resultText });
+
+  } catch (error) {
+    return res.status(500).json({ error: `Server Error: ${error.message}` });
+  }
+}
