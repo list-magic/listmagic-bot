@@ -1,0 +1,54 @@
+export default async function handler(req, res) {
+  // Allow your Systeme.io course page to talk to this script
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const { prompt } = req.body;
+
+  if (!prompt) {
+    return res.status(400).json({ error: 'Missing prompt' });
+  }
+
+  const systemInstructions = `
+    You are the "ListMagic AI Optimizer", an elite Etsy SEO and Listing Expert.
+    Take the user's product input, niche, and focus keywords, then generate a complete, high-converting Etsy listing optimization.
+
+    STRICT OUTPUT RULES:
+    1. TITLE: Generate 1 high-ranking title. MUST be under 140 characters. Primary keyword first.
+    2. 13 TAGS: Provide EXACTLY 13 comma-separated tags. EVERY tag MUST be 20 characters or fewer.
+    3. PRODUCT DESCRIPTION: Hook line, bulleted feature list, and a compelling Call to Action.
+  `;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemInstructions },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(500).json({ error: data.error?.message || 'OpenAI API Error' });
+    }
+
+    return res.status(200).json({ result: data.choices[0].message.content });
+  } catch (error) {
+    return res.status(500).json({ error: 'Server Connection Error' });
+  }
+}
